@@ -1,78 +1,29 @@
 const express = require('express');
 const router = express.Router();
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const Engineer = require('../models/Engineer');
 
-// ── Multer setup ─────────────────────────────────────────────────────────────
-const UPLOAD_DIR = path.join(__dirname, '..', 'engineers_data');
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-
-const storage = multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-    filename: (_req, file, cb) => {
-        // unique name: timestamp + sanitised original name
-        const ts = Date.now();
-        const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-        cb(null, `${ts}_${safe}`);
-    },
-});
-
-const upload = multer({
-    storage,
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
-    fileFilter: (_req, file, cb) => {
-        if (file.mimetype === 'application/pdf') cb(null, true);
-        else cb(new Error('Only PDF files are accepted.'));
-    },
-});
-
-const DOC_UPLOAD_DIR = path.join(__dirname, '..', 'documents');
-if (!fs.existsSync(DOC_UPLOAD_DIR)) fs.mkdirSync(DOC_UPLOAD_DIR, { recursive: true });
-
-const docStorage = multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, DOC_UPLOAD_DIR),
-    filename: (_req, file, cb) => {
-        const ts = Date.now();
-        const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-        cb(null, `${ts}_${safe}`);
-    },
-});
-
-const uploadDoc = multer({
-    storage: docStorage,
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
-    fileFilter: (_req, file, cb) => {
-        if (file.mimetype === 'application/pdf') cb(null, true);
-        else cb(new Error('Only PDF files are accepted.'));
-    },
-});
-
 // ── Routes ────────────────────────────────────────────────────────────────────
 
-// POST /api/engineers/register — register engineer + upload degree PDF
-router.post('/register', upload.single('degree'), async (req, res) => {
+// POST /api/engineers/register — register engineer with external degree upload
+router.post('/register', async (req, res) => {
     try {
         const {
             firstName, lastName, email, phone, discipline,
-            licenseNumber, yearsExperience, city, country, agreedToTerms, password
+            licenseNumber, yearsExperience, city, country, agreedToTerms, password,
+            degreeFilename, degreeOriginalName
         } = req.body;
 
         if (!firstName || !lastName || !email || !phone || !discipline || !city || !country || !password) {
-            // Remove uploaded file if validation fails
-            if (req.file) fs.unlinkSync(req.file.path);
             return res.status(400).json({ success: false, message: 'Missing required fields.' });
         }
 
-        if (!req.file) {
-            return res.status(400).json({ success: false, message: 'Degree certificate PDF is required.' });
+        if (!degreeFilename) {
+            return res.status(400).json({ success: false, message: 'Degree certificate filename is required.' });
         }
 
         if (agreedToTerms !== 'true' && agreedToTerms !== true) {
-            fs.unlinkSync(req.file.path);
             return res.status(400).json({ success: false, message: 'You must agree to the terms.' });
         }
 
@@ -84,8 +35,8 @@ router.post('/register', upload.single('degree'), async (req, res) => {
             yearsExperience: Number(yearsExperience) || 0,
             city, country,
             password: hashedPassword,
-            degreeFilename: req.file.filename,
-            degreeOriginalName: req.file.originalname,
+            degreeFilename: degreeFilename,
+            degreeOriginalName: degreeOriginalName || degreeFilename,
             agreedToTerms: true,
         });
 
@@ -270,18 +221,6 @@ router.get('/', async (req, res) => {
     }
 });
 
-// GET /api/engineers/degree/:filename — serve PDF by unique filename
-router.get('/degree/:filename', (req, res) => {
-    const filePath = path.join(UPLOAD_DIR, req.params.filename);
-    if (!fs.existsSync(filePath)) {
-        return res.status(404).json({ success: false, message: 'Degree file not found.' });
-    }
-    // Force PDF content-type; inline display in browser
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${req.params.filename}"`);
-    res.sendFile(filePath);
-});
-
 // GET /api/engineers/:id — get single engineer
 router.get('/:id', async (req, res) => {
     try {
@@ -343,29 +282,28 @@ router.patch('/:id/bookings/:bookingId/status', async (req, res) => {
     }
 });
 
-// POST /api/engineers/:id/bookings/:bookingId/complete — upload PDF and complete job
-router.post('/:id/bookings/:bookingId/complete', uploadDoc.single('document'), async (req, res) => {
+// POST /api/engineers/:id/bookings/:bookingId/complete — complete job with external document upload
+router.post('/:id/bookings/:bookingId/complete', async (req, res) => {
     try {
-        if (!req.file) {
-            return res.status(400).json({ success: false, message: 'PDF document is required.' });
+        const { documentFilename, documentOriginalName } = req.body;
+        if (!documentFilename) {
+            return res.status(400).json({ success: false, message: 'Document filename is required.' });
         }
         const booking = await Booking.findOneAndUpdate(
             { _id: req.params.bookingId, assignedEngineerId: req.params.id },
             {
                 status: 'Completed',
                 engineerStatus: 'Completed',
-                documentFilename: req.file.filename,
-                documentOriginalName: req.file.originalname,
+                documentFilename: documentFilename,
+                documentOriginalName: documentOriginalName || documentFilename,
             },
             { new: true }
         );
         if (!booking) {
-            fs.unlinkSync(req.file.path);
             return res.status(404).json({ success: false, message: 'Booking not found.' });
         }
         res.json({ success: true, message: 'Job completed successfully!', data: booking });
     } catch (err) {
-        if (req.file) fs.unlinkSync(req.file.path);
         res.status(500).json({ success: false, message: err.message });
     }
 });
