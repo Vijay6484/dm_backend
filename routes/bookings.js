@@ -15,22 +15,22 @@ router.post('/', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Missing required fields.' });
         }
 
-        let locationCoordinates;
-        if (latitude !== undefined && longitude !== undefined) {
-            locationCoordinates = {
-                type: 'Point',
-                coordinates: [Number(longitude), Number(latitude)]
-            };
-        }
-
-        const booking = await Booking.create({
+        const bookingData = {
             name, email, phone, location, serviceType,
             description,
             scheduleNow: scheduleNow !== false,
             scheduleDate: scheduleNow !== false ? '' : scheduleDate,
             scheduleTime: scheduleNow !== false ? '' : scheduleTime,
-            locationCoordinates,
-        });
+        };
+
+        if (latitude !== undefined && longitude !== undefined && latitude !== '' && longitude !== '') {
+            bookingData.locationCoordinates = {
+                type: 'Point',
+                coordinates: [Number(longitude), Number(latitude)]
+            };
+        }
+
+        const booking = await Booking.create(bookingData);
 
         res.status(201).json({ success: true, data: booking });
     } catch (err) {
