@@ -7,6 +7,7 @@ const BookingSchema = new mongoose.Schema(
         phone: { type: String, required: true, trim: true },
         location: { type: String, required: true, trim: true },
         serviceType: { type: String, required: true },
+        units: { type: Number, default: null },
         description: { type: String, default: '' },
         scheduleNow: { type: Boolean, default: true },
         scheduleDate: { type: String, default: '' },

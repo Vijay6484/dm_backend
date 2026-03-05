@@ -6,7 +6,7 @@ const Booking = require('../models/Booking');
 router.post('/', async (req, res) => {
     try {
         const {
-            name, email, phone, location, serviceType,
+            name, email, phone, location, serviceType, units,
             description, scheduleNow, scheduleDate, scheduleTime,
             latitude, longitude
         } = req.body;
@@ -17,6 +17,7 @@ router.post('/', async (req, res) => {
 
         const bookingData = {
             name, email, phone, location, serviceType,
+            units: units !== undefined && units !== '' ? Number(units) : null,
             description,
             scheduleNow: scheduleNow !== false,
             scheduleDate: scheduleNow !== false ? '' : scheduleDate,
