@@ -4,18 +4,32 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const Engineer = require('../models/Engineer');
 
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
+
 // ── Routes ────────────────────────────────────────────────────────────────────
+
+// Nodemailer transporter setup
+const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: process.env.SMTP_PORT || 587,
+    secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+    auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+    }
+});
 
 // POST /api/engineers/register — register engineer with external degree upload
 router.post('/register', async (req, res) => {
     try {
         const {
             firstName, lastName, email, phone, discipline,
-            licenseNumber, yearsExperience, city, country, agreedToTerms, password,
+            licenseNumber, yearsExperience, city, country, agreedToTerms,
             degreeFilename, degreeOriginalName
         } = req.body;
 
-        if (!firstName || !lastName || !email || !phone || !discipline || !city || !country || !password) {
+        if (!firstName || !lastName || !email || !phone || !discipline || !city || !country) {
             return res.status(400).json({ success: false, message: 'Missing required fields.' });
         }
 
@@ -27,7 +41,9 @@ router.post('/register', async (req, res) => {
             return res.status(400).json({ success: false, message: 'You must agree to the terms.' });
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
+        // Auto-generate a secure 8-character password
+        const generatedPassword = crypto.randomBytes(4).toString('hex'); // 8 hex characters
+        const hashedPassword = await bcrypt.hash(generatedPassword, 10);
 
         const engineer = await Engineer.create({
             firstName, lastName, email, phone, discipline,
@@ -39,6 +55,31 @@ router.post('/register', async (req, res) => {
             degreeOriginalName: degreeOriginalName || degreeFilename,
             agreedToTerms: true,
         });
+
+        // Send email with credentials
+        try {
+            await transporter.sendMail({
+                from: `"dometriks Admin" <${process.env.SMTP_USER || 'noreply@dometriks.com'}>`, // sender address
+                to: email, // list of receivers
+                subject: "Welcome to dometriks - Your Login Credentials", // Subject line
+                html: `
+                    <h2>Welcome, ${firstName} ${lastName}!</h2>
+                    <p>Thank you for registering as an engineer with dometriks.</p>
+                    <p>Your account has been created successfully and is currently pending review.</p>
+                    <p>Below are your auto-generated login credentials for the engineer app:</p>
+                    <p><strong>Email (ID):</strong> ${email}</p>
+                    <p><strong>Password:</strong> ${generatedPassword}</p>
+                    <br/>
+                    <p>Please keep this email safe. You will be able to log in once your account is activated by an admin.</p>
+                    <p>Best regards,<br/>The dometriks Team</p>
+                `, // html body
+            });
+            console.log(`Email sent successfully to ${email}`);
+        } catch (emailErr) {
+            console.error("Failed to send welcome email:", emailErr);
+            // We don't fail the registration if the email fails, we still return success 
+            // but maybe we can include a warning.
+        }
 
         res.status(201).json({ success: true, data: engineer });
     } catch (err) {
