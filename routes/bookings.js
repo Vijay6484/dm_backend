@@ -1,9 +1,11 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const Booking = require('../models/Booking');
 
 // POST /api/bookings — create a new booking
 router.post('/', async (req, res) => {
+    console.log('Incoming Booking Request:', req.body);
     try {
         const {
             name, email, phone, location, serviceType, units,
@@ -11,14 +13,18 @@ router.post('/', async (req, res) => {
             latitude, longitude
         } = req.body;
 
-        if (!name || !email || !phone || !location || !serviceType) {
-            return res.status(400).json({ success: false, message: 'Missing required fields.' });
-        }
+        if (!name) return res.status(400).json({ success: false, message: 'Missing required field: name' });
+        if (!phone) return res.status(400).json({ success: false, message: 'Missing required field: phone' });
+        if (!location) return res.status(400).json({ success: false, message: 'Missing required field: location' });
+        if (!serviceType) return res.status(400).json({ success: false, message: 'Missing required field: serviceType' });
+
+        const verificationCode = crypto.randomBytes(4).toString('hex').toUpperCase();
 
         const bookingData = {
             name, email, phone, location, serviceType,
             units: units !== undefined && units !== '' ? Number(units) : null,
             description,
+            verificationCode,
             scheduleNow: scheduleNow !== false,
             scheduleDate: scheduleNow !== false ? '' : scheduleDate,
             scheduleTime: scheduleNow !== false ? '' : scheduleTime,

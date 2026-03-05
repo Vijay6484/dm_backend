@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const BookingSchema = new mongoose.Schema(
     {
         name: { type: String, required: true, trim: true },
-        email: { type: String, required: true, trim: true, lowercase: true },
+        email: { type: String, default: '', trim: true, lowercase: true },
         phone: { type: String, required: true, trim: true },
         location: { type: String, required: true, trim: true },
         serviceType: { type: String, required: true },
@@ -39,6 +39,7 @@ const BookingSchema = new mongoose.Schema(
         },
         documentFilename: { type: String, default: null },
         documentOriginalName: { type: String, default: null },
+        verificationCode: { type: String, required: true },
     },
     { timestamps: true }
 );

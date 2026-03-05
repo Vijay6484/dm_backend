@@ -22,6 +22,7 @@ const transporter = nodemailer.createTransport({
 
 // POST /api/engineers/register — register engineer with external degree upload
 router.post('/register', async (req, res) => {
+    console.log('Incoming Engineer Registration:', req.body);
     try {
         const {
             firstName, lastName, email, phone,
@@ -29,9 +30,11 @@ router.post('/register', async (req, res) => {
             degreeFilename, degreeOriginalName
         } = req.body;
 
-        if (!firstName || !lastName || !email || !phone || !city) {
-            return res.status(400).json({ success: false, message: 'Missing required fields.' });
-        }
+        if (!firstName) return res.status(400).json({ success: false, message: 'Missing required field: firstName' });
+        if (!lastName) return res.status(400).json({ success: false, message: 'Missing required field: lastName' });
+        if (!email) return res.status(400).json({ success: false, message: 'Missing required field: email' });
+        if (!phone) return res.status(400).json({ success: false, message: 'Missing required field: phone' });
+        if (!city) return res.status(400).json({ success: false, message: 'Missing required field: city' });
 
         if (!degreeFilename) {
             return res.status(400).json({ success: false, message: 'Degree certificate filename is required.' });
