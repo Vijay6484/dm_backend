@@ -24,12 +24,12 @@ const transporter = nodemailer.createTransport({
 router.post('/register', async (req, res) => {
     try {
         const {
-            firstName, lastName, email, phone, discipline,
-            licenseNumber, yearsExperience, city, country, agreedToTerms,
+            firstName, lastName, email, phone,
+            licenseNumber, yearsExperience, city, agreedToTerms,
             degreeFilename, degreeOriginalName
         } = req.body;
 
-        if (!firstName || !lastName || !email || !phone || !discipline || !city || !country) {
+        if (!firstName || !lastName || !email || !phone || !city) {
             return res.status(400).json({ success: false, message: 'Missing required fields.' });
         }
 
@@ -46,10 +46,10 @@ router.post('/register', async (req, res) => {
         const hashedPassword = await bcrypt.hash(generatedPassword, 10);
 
         const engineer = await Engineer.create({
-            firstName, lastName, email, phone, discipline,
+            firstName, lastName, email, phone,
             licenseNumber: licenseNumber || '',
             yearsExperience: Number(yearsExperience) || 0,
-            city, country,
+            city,
             password: hashedPassword,
             degreeFilename: degreeFilename,
             degreeOriginalName: degreeOriginalName || degreeFilename,

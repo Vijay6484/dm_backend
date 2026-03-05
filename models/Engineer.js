@@ -6,11 +6,9 @@ const EngineerSchema = new mongoose.Schema(
         lastName: { type: String, required: true, trim: true },
         email: { type: String, required: true, trim: true, lowercase: true, unique: true },
         phone: { type: String, required: true, trim: true },
-        discipline: { type: String, required: true },
         licenseNumber: { type: String, default: '' },
         yearsExperience: { type: Number, default: 0 },
         city: { type: String, required: true, trim: true },
-        country: { type: String, required: true, trim: true },
         password: { type: String, required: true },
 
         // Mobile App fields
