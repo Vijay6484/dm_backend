@@ -36,8 +36,8 @@ const EngineerSchema = new mongoose.Schema(
 
         status: {
             type: String,
-            enum: ['Pending', 'Active', 'Inactive', 'Rejected'],
-            default: 'Pending',
+            enum: ['Active', 'Inactive'],
+            default: 'Active',
         },
     },
     { timestamps: true }

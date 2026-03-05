@@ -65,12 +65,11 @@ router.post('/register', async (req, res) => {
                 html: `
                     <h2>Welcome, ${firstName} ${lastName}!</h2>
                     <p>Thank you for registering as an engineer with dometriks.</p>
-                    <p>Your account has been created successfully and is currently pending review.</p>
-                    <p>Below are your auto-generated login credentials for the engineer app:</p>
+                    <p>Your account has been actively created! Below are your auto-generated login credentials for the engineer app:</p>
                     <p><strong>Email (ID):</strong> ${email}</p>
                     <p><strong>Password:</strong> ${generatedPassword}</p>
                     <br/>
-                    <p>Please keep this email safe. You will be able to log in once your account is activated by an admin.</p>
+                    <p>Please keep this email safe. You can log in immediately.</p>
                     <p>Best regards,<br/>The dometriks Team</p>
                 `, // html body
             });
@@ -273,11 +272,11 @@ router.get('/:id', async (req, res) => {
     }
 });
 
-// PATCH /api/engineers/:id/status — approve / reject / deactivate
+// PATCH /api/engineers/:id/status — activate / deactivate
 router.patch('/:id/status', async (req, res) => {
     try {
         const { status } = req.body;
-        const allowed = ['Pending', 'Active', 'Inactive', 'Rejected'];
+        const allowed = ['Active', 'Inactive'];
         if (!allowed.includes(status)) {
             return res.status(400).json({ success: false, message: `Status must be one of: ${allowed.join(', ')}` });
         }
