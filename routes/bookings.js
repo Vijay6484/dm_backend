@@ -14,6 +14,7 @@ router.post('/', async (req, res) => {
         } = req.body;
 
         if (!name) return res.status(400).json({ success: false, message: 'Missing required field: name' });
+        if (!email) return res.status(400).json({ success: false, message: 'Missing required field: email' });
         if (!phone) return res.status(400).json({ success: false, message: 'Missing required field: phone' });
         if (!location) return res.status(400).json({ success: false, message: 'Missing required field: location' });
         if (!serviceType) return res.status(400).json({ success: false, message: 'Missing required field: serviceType' });
