@@ -6,6 +6,12 @@ const Engineer = require('../models/Engineer');
 
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+// Multer setup for report file uploads (stored in memory for email attachment)
+const reportUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
@@ -350,5 +356,108 @@ router.post('/:id/bookings/:bookingId/complete', async (req, res) => {
         res.status(500).json({ success: false, message: err.message });
     }
 });
+
+// POST /api/engineers/:id/bookings/:bookingId/send-report — email the report PDFs to customer
+router.post('/:id/bookings/:bookingId/send-report',
+    reportUpload.fields([
+        { name: 'survey_pdf', maxCount: 1 },
+        { name: 'certificate_pdf', maxCount: 1 }
+    ]),
+    async (req, res) => {
+        try {
+            const { email, customer_name } = req.body;
+            const booking = await Booking.findById(req.params.bookingId);
+
+            if (!booking) {
+                return res.status(404).json({ success: false, message: 'Booking not found.' });
+            }
+
+            const customerEmail = email || booking.email;
+            const customerName = customer_name || booking.name;
+
+            if (!customerEmail) {
+                return res.status(400).json({ success: false, message: 'Customer email is required.' });
+            }
+
+            // Build email attachments from uploaded files
+            const attachments = [];
+
+            if (req.files && req.files['certificate_pdf'] && req.files['certificate_pdf'][0]) {
+                attachments.push({
+                    filename: `Dometriks_Certificate_${booking._id}.pdf`,
+                    content: req.files['certificate_pdf'][0].buffer,
+                    contentType: 'application/pdf',
+                });
+            }
+
+            if (req.files && req.files['survey_pdf'] && req.files['survey_pdf'][0]) {
+                attachments.push({
+                    filename: `Dometriks_Survey_Report_${booking._id}.pdf`,
+                    content: req.files['survey_pdf'][0].buffer,
+                    contentType: 'application/pdf',
+                });
+            }
+
+            if (attachments.length === 0) {
+                return res.status(400).json({ success: false, message: 'At least one PDF file is required.' });
+            }
+
+            // Send email with PDF attachments
+            await transporter.sendMail({
+                from: `"Dometriks" <${process.env.SMTP_USER || 'noreply@dometriks.com'}>`,
+                to: customerEmail,
+                subject: `Your Dometriks Site Measurement Report - ${booking.location || 'Property'}`,
+                html: `
+                    <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                        <div style="background: #0F2B46; padding: 24px; text-align: center;">
+                            <h1 style="color: #FFFFFF; margin: 0; font-size: 24px;">DOMETRIKS</h1>
+                            <p style="color: #38B6FF; margin: 5px 0 0; font-size: 12px; letter-spacing: 3px;">PROPERTY MEASUREMENT PLATFORM</p>
+                        </div>
+                        <div style="padding: 30px; background: #FFFFFF;">
+                            <h2 style="color: #0F2B46; margin-top: 0;">Dear ${customerName},</h2>
+                            <p style="color: #475569; line-height: 1.6;">
+                                Thank you for choosing Dometriks for your property measurement needs.
+                                Your site measurement has been completed successfully.
+                            </p>
+                            <p style="color: #475569; line-height: 1.6;">
+                                Please find attached:
+                            </p>
+                            <ul style="color: #475569; line-height: 1.8;">
+                                <li><strong>Verification Certificate</strong> — Official measurement certification</li>
+                                <li><strong>Survey Report</strong> — Detailed measurement data from the site visit</li>
+                            </ul>
+                            <div style="background: #F1F5F9; border-left: 4px solid #38B6FF; padding: 15px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+                                <p style="color: #475569; margin: 0; font-size: 13px;">
+                                    <strong>Property:</strong> ${booking.location || 'N/A'}<br/>
+                                    <strong>Service:</strong> ${booking.serviceType || 'Site Measurement'}<br/>
+                                    <strong>Date:</strong> ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                </p>
+                            </div>
+                            <p style="color: #475569; line-height: 1.6;">
+                                If you have any questions about your report, please don't hesitate to contact us.
+                            </p>
+                            <p style="color: #475569;">
+                                Best regards,<br/>
+                                <strong>The Dometriks Team</strong>
+                            </p>
+                        </div>
+                        <div style="background: #0F2B46; padding: 16px; text-align: center;">
+                            <p style="color: #94A3B8; margin: 0; font-size: 11px;">
+                                © ${new Date().getFullYear()} Dometriks Solutions · www.dometriks.com
+                            </p>
+                        </div>
+                    </div>
+                `,
+                attachments,
+            });
+
+            console.log(`Report email sent to ${customerEmail} for booking ${booking._id}`);
+            res.json({ success: true, message: 'Report emailed successfully.' });
+        } catch (err) {
+            console.error('Send report email error:', err);
+            res.status(500).json({ success: false, message: err.message });
+        }
+    }
+);
 
 module.exports = router;
