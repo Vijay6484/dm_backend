@@ -32,6 +32,9 @@ const EngineerSchema = new mongoose.Schema(
         degreeFilename: { type: String, default: null },
         degreeOriginalName: { type: String, default: null },
 
+        // Profile Photo URL
+        profilePhoto: { type: String, default: null },
+
         agreedToTerms: { type: Boolean, required: true, default: false },
 
         status: {

@@ -132,7 +132,9 @@ router.post('/login', async (req, res) => {
                 firstName: engineer.firstName,
                 lastName: engineer.lastName,
                 email: engineer.email,
-                status: engineer.status
+                status: engineer.status,
+                phone: engineer.phone,
+                profilePhoto: engineer.profilePhoto
             }
         });
     } catch (err) {
@@ -164,6 +166,29 @@ router.patch('/:id/location', async (req, res) => {
         );
         if (!engineer) return res.status(404).json({ success: false, message: 'Engineer not found.' });
         res.json({ success: true, message: 'Location updated via App.' });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// PATCH /api/engineers/:id/profile-photo — update engineer's profile photo
+router.patch('/:id/profile-photo', async (req, res) => {
+    try {
+        const { profilePhoto } = req.body;
+
+        if (!profilePhoto) {
+            return res.status(400).json({ success: false, message: 'Profile photo URL is required.' });
+        }
+
+        const engineer = await Engineer.findByIdAndUpdate(
+            req.params.id,
+            { profilePhoto },
+            { new: true }
+        );
+
+        if (!engineer) return res.status(404).json({ success: false, message: 'Engineer not found.' });
+
+        res.json({ success: true, message: 'Profile photo updated successfully!', data: engineer });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
