@@ -10,7 +10,7 @@ router.post('/', async (req, res) => {
         const {
             name, email, phone, location, serviceType, units,
             description, scheduleNow, scheduleDate, scheduleTime,
-            latitude, longitude
+            latitude, longitude, amount, paymentStatus
         } = req.body;
 
         if (!name) return res.status(400).json({ success: false, message: 'Missing required field: name' });
@@ -21,11 +21,23 @@ router.post('/', async (req, res) => {
 
         const verificationCode = crypto.randomBytes(4).toString('hex').toUpperCase();
 
+        const unitsNum = units !== undefined && units !== '' ? Number(units) : 1;
+        const baseAmount = amount ? Number(amount) : (unitsNum * 1999);
+        const gstRate = 18;
+        const gstAmount = Math.round(baseAmount * (gstRate / 100) * 100) / 100;
+        const totalAmount = Math.round((baseAmount + gstAmount) * 100) / 100;
+
         const bookingData = {
             name, email, phone, location, serviceType,
             units: units !== undefined && units !== '' ? Number(units) : null,
             description,
             verificationCode,
+            amount: baseAmount,
+            amountBeforeGst: baseAmount,
+            gstAmount,
+            gstRate,
+            totalAmount,
+            paymentStatus: paymentStatus === 'Paid' ? 'Paid' : 'Pending',
             scheduleNow: scheduleNow !== false,
             scheduleDate: scheduleNow !== false ? '' : scheduleDate,
             scheduleTime: scheduleNow !== false ? '' : scheduleTime,

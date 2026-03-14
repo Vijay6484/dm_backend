@@ -7,6 +7,7 @@ const path = require('path');
 const os = require('os');
 
 const bookingRoutes = require('./routes/bookings');
+const paymentRoutes = require('./routes/payment');
 const engineerRoutes = require('./routes/engineers');
 const analyticsRoutes = require('./routes/analytics');
 
@@ -26,6 +27,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/bookings', bookingRoutes);
+app.use('/api/payment', paymentRoutes);
 app.use('/api/engineers', engineerRoutes);
 app.use('/api/analytics', analyticsRoutes);
 

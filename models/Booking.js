@@ -39,6 +39,17 @@ const BookingSchema = new mongoose.Schema(
         },
         documentFilename: { type: String, default: null },
         documentOriginalName: { type: String, default: null },
+        amount: { type: Number, default: 1999 },
+        amountBeforeGst: { type: Number, default: null },
+        gstAmount: { type: Number, default: null },
+        gstRate: { type: Number, default: 18 },
+        totalAmount: { type: Number, default: null },
+        paymentStatus: {
+            type: String,
+            enum: ['Pending', 'Paid', 'Failed'],
+            default: 'Pending',
+        },
+        payuTxnId: { type: String, default: null },
         verificationCode: { type: String, required: true },
     },
     { timestamps: true }
