@@ -59,6 +59,19 @@ router.post('/', async (req, res) => {
     }
 });
 
+// GET /api/bookings/verify?code=XXX — find booking by verification code (for public certificate verification)
+router.get('/verify', async (req, res) => {
+    try {
+        const code = (req.query.code || '').toString().trim().toUpperCase();
+        if (!code) return res.status(400).json({ success: false, message: 'Verification code is required.' });
+        const booking = await Booking.findOne({ verificationCode: code });
+        if (!booking) return res.status(404).json({ success: false, message: 'No certificate found for this verification code.' });
+        res.json({ success: true, data: booking });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 // GET /api/bookings — list all bookings (newest first)
 router.get('/', async (req, res) => {
     try {
