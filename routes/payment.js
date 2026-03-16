@@ -107,6 +107,7 @@ router.post('/success', async (req, res) => {
         await Booking.findByIdAndUpdate(bookingId, {
             paymentStatus: 'Paid',
             payuTxnId: body.mihpayid || body.txnid,
+            status: 'Confirmed',
         });
         res.redirect(`${frontendUrl}/payment-success?bookingId=${bookingId}`);
     } catch (err) {

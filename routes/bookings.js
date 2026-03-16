@@ -37,7 +37,11 @@ router.post('/', async (req, res) => {
             gstAmount,
             gstRate,
             totalAmount,
+            // When user clicks \"Book Measurement Visit\" on the website,
+            // we always start with payment pending and booking status pending.
             paymentStatus: paymentStatus === 'Paid' ? 'Paid' : 'Pending',
+            status: 'Pending',
+            engineerStatus: 'Unassigned',
             scheduleNow: scheduleNow !== false,
             scheduleDate: scheduleNow !== false ? '' : scheduleDate,
             scheduleTime: scheduleNow !== false ? '' : scheduleTime,

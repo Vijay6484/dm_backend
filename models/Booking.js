@@ -51,7 +51,9 @@ const BookingSchema = new mongoose.Schema(
         },
         payuTxnId: { type: String, default: null },
         verificationCode: { type: String, required: true },
-        certificateNumber: { type: String, default: null, unique: true, sparse: true },
+        // Certificate number (DMTX-YYYY-XXXXXX) set only after job completion
+        // We do NOT keep this unique at DB level to avoid duplicate-null issues.
+        certificateNumber: { type: String, default: null },
     },
     { timestamps: true }
 );

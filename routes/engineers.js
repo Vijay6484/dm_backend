@@ -208,11 +208,13 @@ router.get('/:id/nearby-bookings', async (req, res) => {
         const [lng, lat] = engineer.location.coordinates;
         const radiusInMeters = 10000; // 10 km
 
-        // Find bookings that are 'Unassigned' (or 'Pending' for legacy), have NO assigned engineer, and are within 10km
+        // Find bookings that are 'Unassigned' (or 'Pending' for legacy), have NO assigned engineer,
+        // are fully paid, and are within 10km
         const bookings = await Booking.find({
             status: { $in: ['Unassigned', 'Pending'] },
             engineerStatus: { $in: ['Unassigned', 'Pending'] },
             assignedEngineerId: null,
+            paymentStatus: 'Paid',
             locationCoordinates: {
                 $nearSphere: {
                     $geometry: {
@@ -329,7 +331,8 @@ router.get('/:id/my-jobs', async (req, res) => {
     try {
         const bookings = await Booking.find({
             assignedEngineerId: req.params.id,
-            status: { $in: ['Assigned', 'Survey Done'] }
+            status: { $in: ['Assigned', 'Survey Done'] },
+            paymentStatus: 'Paid',
         }).sort({ updatedAt: -1 });
         res.json({ success: true, data: bookings });
     } catch (err) {
