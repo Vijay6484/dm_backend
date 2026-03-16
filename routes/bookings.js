@@ -59,13 +59,13 @@ router.post('/', async (req, res) => {
     }
 });
 
-// GET /api/bookings/verify?code=XXX — find booking by verification code (for public certificate verification)
+// GET /api/bookings/verify?cert=XXX — find booking by certificate number (DMTX) for public verification
 router.get('/verify', async (req, res) => {
     try {
-        const code = (req.query.code || '').toString().trim().toUpperCase();
-        if (!code) return res.status(400).json({ success: false, message: 'Verification code is required.' });
-        const booking = await Booking.findOne({ verificationCode: code });
-        if (!booking) return res.status(404).json({ success: false, message: 'No certificate found for this verification code.' });
+        const cert = (req.query.cert || req.query.code || '').toString().trim().toUpperCase();
+        if (!cert) return res.status(400).json({ success: false, message: 'Certificate number is required.' });
+        const booking = await Booking.findOne({ certificateNumber: cert });
+        if (!booking) return res.status(404).json({ success: false, message: 'No certificate found for this number.' });
         res.json({ success: true, data: booking });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });

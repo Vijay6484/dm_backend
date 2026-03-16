@@ -51,6 +51,7 @@ const BookingSchema = new mongoose.Schema(
         },
         payuTxnId: { type: String, default: null },
         verificationCode: { type: String, required: true },
+        certificateNumber: { type: String, default: null, unique: true, sparse: true },
     },
     { timestamps: true }
 );

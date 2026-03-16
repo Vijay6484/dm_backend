@@ -359,18 +359,22 @@ router.patch('/:id/bookings/:bookingId/status', async (req, res) => {
 // POST /api/engineers/:id/bookings/:bookingId/complete — complete job with external document upload
 router.post('/:id/bookings/:bookingId/complete', async (req, res) => {
     try {
-        const { documentFilename, documentOriginalName } = req.body;
+        const { documentFilename, documentOriginalName, certificateNumber } = req.body;
         if (!documentFilename) {
             return res.status(400).json({ success: false, message: 'Document filename is required.' });
         }
+        const update = {
+            status: 'Completed',
+            engineerStatus: 'Completed',
+            documentFilename: documentFilename,
+            documentOriginalName: documentOriginalName || documentFilename,
+        };
+        if (certificateNumber && typeof certificateNumber === 'string' && certificateNumber.trim()) {
+            update.certificateNumber = certificateNumber.trim().toUpperCase();
+        }
         const booking = await Booking.findOneAndUpdate(
             { _id: req.params.bookingId, assignedEngineerId: req.params.id },
-            {
-                status: 'Completed',
-                engineerStatus: 'Completed',
-                documentFilename: documentFilename,
-                documentOriginalName: documentOriginalName || documentFilename,
-            },
+            update,
             { new: true }
         );
         if (!booking) {
