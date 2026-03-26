@@ -8,7 +8,8 @@ const PAYU_TEST_URL = 'https://test.payu.in/_payment';
 const PAYU_PROD_URL = 'https://secure.payu.in/_payment';
 
 function getPayuUrl() {
-    return process.env.PAYU_MODE === 'production' ? PAYU_PROD_URL : PAYU_TEST_URL;
+    const mode = (process.env.PAYU_MODE || '').toLowerCase();
+    return mode === 'production' || mode === 'live' ? PAYU_PROD_URL : PAYU_TEST_URL;
 }
 
 function generatePayuHash(params, salt) {
