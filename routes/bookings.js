@@ -22,7 +22,7 @@ router.post('/', async (req, res) => {
         const verificationCode = crypto.randomBytes(4).toString('hex').toUpperCase();
 
         const unitsNum = units !== undefined && units !== '' ? Number(units) : 1;
-        const baseAmount = amount ? Number(amount) : (unitsNum * 1999);
+        const baseAmount = amount ? Number(amount) : (unitsNum * 3);
         const gstRate = 18;
         const gstAmount = Math.round(baseAmount * (gstRate / 100) * 100) / 100;
         const totalAmount = Math.round((baseAmount + gstAmount) * 100) / 100;
