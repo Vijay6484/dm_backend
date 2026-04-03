@@ -208,10 +208,11 @@ router.get('/:id/nearby-bookings', async (req, res) => {
         const [lng, lat] = engineer.location.coordinates;
         const radiusInMeters = 10000; // 10 km
 
-        // Find bookings that are 'Unassigned' (or 'Pending' for legacy), have NO assigned engineer,
-        // are fully paid, and are within 10km
+        // Find bookings that are open for allocation, have NO assigned engineer,
+        // are fully paid, and are within 10km.
+        // Note: payment success sets booking status to 'Confirmed', so include it.
         const bookings = await Booking.find({
-            status: { $in: ['Unassigned', 'Pending'] },
+            status: { $in: ['Unassigned', 'Pending', 'Confirmed'] },
             engineerStatus: { $in: ['Unassigned', 'Pending'] },
             assignedEngineerId: null,
             paymentStatus: 'Paid',
