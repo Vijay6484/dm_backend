@@ -1,9 +1,9 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const morgan = require('morgan');
-const path = require('path');
 const os = require('os');
 
 const bookingRoutes = require('./routes/bookings');
@@ -50,7 +50,7 @@ app.use((err, _req, res, _next) => {
 
 // ── MongoDB connection + server start ─────────────────────────────────────────
 mongoose
-    .connect(process.env.MONGO_URI)
+    .connect(process.env.MONGO_URI || '')
     .then(() => {
         console.log('✅ MongoDB connected →', process.env.MONGO_URI);
         const networkInterfaces = os.networkInterfaces();
@@ -73,6 +73,12 @@ mongoose
         });
     })
     .catch((err) => {
-        console.error('❌ MongoDB connection failed:', err.message);
+        const hasUri = typeof process.env.MONGO_URI === 'string' && process.env.MONGO_URI.trim().length > 0;
+        if (!hasUri) {
+            console.error('❌ MongoDB connection failed: MONGO_URI is missing.');
+            console.error('   Fix: set MONGO_URI in backend/.env and start the server from backend/');
+        } else {
+            console.error('❌ MongoDB connection failed:', err.message);
+        }
         process.exit(1);
     });
