@@ -2,9 +2,12 @@
 /**
  * upload_report.php — Dometriks Report Upload & PDF Merge
  * 
- * Receives two PDF files (survey_pdf and certificate_pdf), merges them into 
+ * Receives two PDF files (survey_pdf and certificate_pdf), merges them into
  * one combined PDF, and stores it on the server. Returns the URL of the 
  * merged file.
+ *
+ * Optionally accepts:
+ *   - dxf_file: CAD export (DXF) to store alongside the PDFs.
  * 
  * Expects: multipart/form-data POST with:
  *   - survey_pdf: The engineer's survey PDF file
@@ -14,7 +17,7 @@
  * 
  * Returns JSON:
  *   { success: true, file_url: "https://dometriks.com/reports/merged_xxx.pdf",
- *     survey_url: "...", certificate_url: "..." }
+ *     survey_url: "...", certificate_url: "...", dxf_url: "..." }
  */
 
 header('Content-Type: application/json');
@@ -64,10 +67,12 @@ $customerName = isset($_POST['customer_name']) ? $_POST['customer_name'] : 'Cust
 $surveyFilename = "survey_{$bookingId}_{$timestamp}.pdf";
 $certFilename = "certificate_{$bookingId}_{$timestamp}.pdf";
 $mergedFilename = "report_{$bookingId}_{$timestamp}.pdf";
+$dxfFilename = "floor_plan_{$bookingId}_{$timestamp}.dxf";
 
 $surveyPath = $uploadDir . $surveyFilename;
 $certPath = $uploadDir . $certFilename;
 $mergedPath = $uploadDir . $mergedFilename;
+$dxfPath = $uploadDir . $dxfFilename;
 
 // Move uploaded files to reports directory
 if (!move_uploaded_file($_FILES['survey_pdf']['tmp_name'], $surveyPath)) {
@@ -80,6 +85,22 @@ if (!move_uploaded_file($_FILES['certificate_pdf']['tmp_name'], $certPath)) {
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'Failed to save certificate PDF.']);
     exit;
+}
+
+// Optional: Save DXF file if provided
+$dxfUrl = null;
+if (isset($_FILES['dxf_file']) && $_FILES['dxf_file']['error'] === UPLOAD_ERR_OK) {
+    // Basic allowlist check: only .dxf
+    $originalName = isset($_FILES['dxf_file']['name']) ? $_FILES['dxf_file']['name'] : '';
+    $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+    if ($ext !== 'dxf') {
+        // ignore invalid DXF upload; do not fail report upload
+        $dxfUrl = null;
+    } else {
+        if (move_uploaded_file($_FILES['dxf_file']['tmp_name'], $dxfPath)) {
+            $dxfUrl = $baseUrl . $dxfFilename;
+        }
+    }
 }
 
 // Try to merge PDFs using various available methods
@@ -160,6 +181,7 @@ $response = [
     'file_url' => $baseUrl . $mergedFilename,
     'survey_url' => $baseUrl . $surveyFilename,
     'certificate_url' => $baseUrl . $certFilename,
+    'dxf_url' => $dxfUrl,
     'merged' => $merged,
     'booking_id' => $bookingId,
     'customer_name' => $customerName,

@@ -363,7 +363,7 @@ router.patch('/:id/bookings/:bookingId/status', async (req, res) => {
 // POST /api/engineers/:id/bookings/:bookingId/complete — complete job with external document upload
 router.post('/:id/bookings/:bookingId/complete', async (req, res) => {
     try {
-        const { documentFilename, documentOriginalName, certificateNumber } = req.body;
+        const { documentFilename, documentOriginalName, certificateNumber, dxfUrl } = req.body;
         if (!documentFilename) {
             return res.status(400).json({ success: false, message: 'Document filename is required.' });
         }
@@ -373,6 +373,9 @@ router.post('/:id/bookings/:bookingId/complete', async (req, res) => {
             documentFilename: documentFilename,
             documentOriginalName: documentOriginalName || documentFilename,
         };
+        if (dxfUrl && typeof dxfUrl === 'string' && dxfUrl.trim()) {
+            update.dxfUrl = dxfUrl.trim();
+        }
         if (certificateNumber && typeof certificateNumber === 'string' && certificateNumber.trim()) {
             update.certificateNumber = certificateNumber.trim().toUpperCase();
         }

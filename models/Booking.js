@@ -44,6 +44,20 @@ const BookingSchema = new mongoose.Schema(
         gstAmount: { type: Number, default: null },
         gstRate: { type: Number, default: 18 },
         totalAmount: { type: Number, default: null },
+        // Pricing split: advance paid online vs remaining payable on arrival
+        advanceAmount: { type: Number, default: null },
+        advanceGstAmount: { type: Number, default: null },
+        advanceTotalAmount: { type: Number, default: null },
+        remainingAmount: { type: Number, default: null },
+        remainingPaymentStatus: {
+            type: String,
+            enum: ['Pending', 'Paid', 'Failed'],
+            default: 'Pending',
+        },
+        remainingPayuTxnId: { type: String, default: null },
+        remainingPaidAt: { type: Date, default: null },
+        // Optional CAD export (DXF) stored on dometriks.com/reports/
+        dxfUrl: { type: String, default: null },
         paymentStatus: {
             type: String,
             enum: ['Pending', 'Paid', 'Failed'],

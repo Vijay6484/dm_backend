@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const Booking = require('../models/Booking');
+const { buildBookingConfirmationHtml } = require('../utils/booking_confirmation_pdf');
+const { renderPdfBufferFromHtml } = require('../utils/render_pdf');
 
 // POST /api/bookings — create a new booking
 router.post('/', async (req, res) => {
@@ -22,21 +24,40 @@ router.post('/', async (req, res) => {
         const verificationCode = crypto.randomBytes(4).toString('hex').toUpperCase();
 
         const unitsNum = units !== undefined && units !== '' ? Number(units) : 1;
-        const baseAmount = amount ? Number(amount) : (unitsNum * 3);
+
+        // Pricing model:
+        // - Full service fee is based on units (used for remaining due on arrival)
+        // - Online payment is an advance booking amount (₹200 + GST) only
+        // Note: `amount` coming from frontend is ignored for safety; backend is source of truth.
+        const SERVICE_FEE_PER_UNIT = 1999;
+        const ADVANCE_BASE = 200;
         const gstRate = 18;
+
+        const baseAmount = unitsNum * SERVICE_FEE_PER_UNIT;
         const gstAmount = Math.round(baseAmount * (gstRate / 100) * 100) / 100;
         const totalAmount = Math.round((baseAmount + gstAmount) * 100) / 100;
+
+        const advanceAmount = ADVANCE_BASE;
+        const advanceGstAmount = Math.round(advanceAmount * (gstRate / 100) * 100) / 100;
+        const advanceTotalAmount = Math.round((advanceAmount + advanceGstAmount) * 100) / 100;
+        const remainingAmount = Math.max(0, Math.round((totalAmount - advanceTotalAmount) * 100) / 100);
+        const remainingPaymentStatus = remainingAmount <= 0 ? 'Paid' : 'Pending';
 
         const bookingData = {
             name, email, phone, location, serviceType,
             units: units !== undefined && units !== '' ? Number(units) : null,
             description,
             verificationCode,
-            amount: baseAmount,
+            amount: baseAmount, // kept for backward compatibility
             amountBeforeGst: baseAmount,
             gstAmount,
             gstRate,
             totalAmount,
+            advanceAmount,
+            advanceGstAmount,
+            advanceTotalAmount,
+            remainingAmount,
+            remainingPaymentStatus,
             // When user clicks \"Book Measurement Visit\" on the website,
             // we always start with payment pending and booking status pending.
             paymentStatus: paymentStatus === 'Paid' ? 'Paid' : 'Pending',
@@ -99,6 +120,26 @@ router.get('/:id', async (req, res) => {
         if (!booking) return res.status(404).json({ success: false, message: 'Booking not found.' });
         res.json({ success: true, data: booking });
     } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// GET /api/bookings/:id/confirmation-pdf — download booking confirmation PDF (with QR)
+router.get('/:id/confirmation-pdf', async (req, res) => {
+    try {
+        const booking = await Booking.findById(req.params.id);
+        if (!booking) return res.status(404).json({ success: false, message: 'Booking not found.' });
+        const html = await buildBookingConfirmationHtml(booking);
+        const pdfBuffer = await renderPdfBufferFromHtml(html);
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader(
+            'Content-Disposition',
+            `attachment; filename="Booking_Confirmation_${booking._id}.pdf"`
+        );
+        res.status(200).send(pdfBuffer);
+    } catch (err) {
+        console.error('confirmation-pdf error:', err);
         res.status(500).json({ success: false, message: err.message });
     }
 });
