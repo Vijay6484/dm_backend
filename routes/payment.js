@@ -1,6 +1,5 @@
 const express = require('express');
 const crypto = require('crypto');
-const mongoose = require('mongoose');
 const router = express.Router();
 const Booking = require('../models/Booking');
 const { sendBookingConfirmationEmail } = require('../utils/send_booking_confirmation');
@@ -12,20 +11,6 @@ const PAYU_PROD_URL = 'https://secure.payu.in/_payment';
 function getPayuUrl() {
     const mode = (process.env.PAYU_MODE || '').toLowerCase();
     return mode === 'production' || mode === 'live' ? PAYU_PROD_URL : PAYU_TEST_URL;
-}
-
-/** PayU hosted checkout samples include empty pg and bankcode; omitting them can break checkout. */
-function payuHostedCheckoutExtras() {
-    return { pg: '', bankcode: '' };
-}
-
-/** Pipe breaks SHA512 hash segments; PayU hashes productinfo as a single field. */
-function sanitizePayuProductInfo(s) {
-    const t = String(s || '')
-        .replace(/\|/g, ' ')
-        .replace(/\r?\n/g, ' ')
-        .trim();
-    return (t || 'Service').slice(0, 100);
 }
 
 function generatePayuHash(params, salt) {
@@ -49,7 +34,7 @@ function verifyPayuResponseHash(body, salt) {
 function pickPayuPostBodyFields(obj) {
     const allow = new Set([
         'key', 'txnid', 'amount', 'productinfo', 'firstname', 'email', 'phone',
-        'surl', 'furl', 'pg', 'bankcode', 'udf1', 'udf2', 'udf3', 'udf4', 'udf5',
+        'surl', 'furl', 'udf1', 'udf2', 'udf3', 'udf4', 'udf5',
         'hash', 'service_provider',
     ]);
     const out = {};
@@ -92,11 +77,6 @@ function payuAutoPostHtml({ payuUrl, fields, title }) {
 </html>`;
 }
 
-function appendPayuServiceProvider(params) {
-    const sp = (process.env.PAYU_SERVICE_PROVIDER || '').trim();
-    if (sp) params.service_provider = sp;
-}
-
 /**
  * Builds advance (booking) PayU POST fields + payuUrl. Hash uses the same fields PayU hashes (no service_provider).
  */
@@ -134,7 +114,7 @@ async function buildAdvancePayuCheckout(bookingId) {
     const txnid = `TXN${bookingId.toString().slice(-8)}${Date.now().toString(36).toUpperCase()}`;
 
     const firstname = (booking.name || '').replace(/[^a-zA-Z\s]/g, '').trim().split(/\s+/)[0] || 'Customer';
-    const productinfo = sanitizePayuProductInfo(`Property Measurement - ${booking.serviceType}`);
+    const productinfo = `Property Measurement - ${booking.serviceType}`;
 
     const apiBase = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5555}`;
     const surl = `${apiBase}/api/payment/success`;
@@ -151,42 +131,15 @@ async function buildAdvancePayuCheckout(bookingId) {
         surl,
         furl,
         udf1: bookingId.toString(),
-        ...payuHostedCheckoutExtras(),
     };
 
     params.hash = generatePayuHash(params, salt);
-    appendPayuServiceProvider(params);
+    params.service_provider = 'payu_paisa';
 
     return { postFields: params, payuUrl: getPayuUrl() };
 }
 
-// GET /api/payment/advance/pay?bookingId= — server HTML that POSTs once to PayU (avoids duplicate client POSTs / rate limits)
-router.get('/advance/pay', async (req, res) => {
-    const bookingId = (req.query.bookingId || '').toString().trim();
-    if (!bookingId || !mongoose.Types.ObjectId.isValid(bookingId)) {
-        res.status(400).setHeader('Content-Type', 'text/html; charset=utf-8');
-        return res.send('<html><body><p>Invalid booking link.</p></body></html>');
-    }
-    try {
-        const { postFields, payuUrl } = await buildAdvancePayuCheckout(bookingId);
-        const html = payuAutoPostHtml({
-            payuUrl,
-            title: 'Redirecting to PayU',
-            fields: postFields,
-        });
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-        res.setHeader('Pragma', 'no-cache');
-        res.status(200).send(html);
-    } catch (err) {
-        const code = err.statusCode || 500;
-        console.error('Advance pay page error:', err.message || err);
-        res.status(code).setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.send(`<html><body style="font-family:Arial;padding:24px;"><p>${(err.message || 'Something went wrong.').replace(/</g, '')}</p></body></html>`);
-    }
-});
-
-// POST /api/payment/init — JSON params for a booking (optional; website uses GET /advance/pay)
+// POST /api/payment/init — generate PayU params for a booking (website posts form to PayU)
 router.post('/init', async (req, res) => {
     try {
         const { bookingId } = req.body;
@@ -228,7 +181,7 @@ router.get('/remaining/pay', async (req, res) => {
         const amountStr = Number(booking.remainingAmount || 0).toFixed(2);
         const txnid = `RMN${bookingId.toString().slice(-8)}${Date.now().toString(36).toUpperCase()}`;
         const firstname = (booking.name || '').replace(/[^a-zA-Z\s]/g, '').trim().split(/\s+/)[0] || 'Customer';
-        const productinfo = sanitizePayuProductInfo(`Remaining Payment - ${booking.serviceType}`);
+        const productinfo = `Remaining Payment - ${booking.serviceType}`;
 
         const apiBase = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5555}`;
         const surl = `${apiBase}/api/payment/remaining/success`;
@@ -245,10 +198,9 @@ router.get('/remaining/pay', async (req, res) => {
             surl,
             furl,
             udf1: bookingId.toString(),
-            ...payuHostedCheckoutExtras(),
         };
         params.hash = generatePayuHash(params, salt);
-        appendPayuServiceProvider(params);
+        params.service_provider = 'payu_paisa';
 
         const html = payuAutoPostHtml({
             payuUrl: getPayuUrl(),
