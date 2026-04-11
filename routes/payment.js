@@ -13,6 +13,20 @@ function getPayuUrl() {
     return mode === 'production' || mode === 'live' ? PAYU_PROD_URL : PAYU_TEST_URL;
 }
 
+/** PayU hosted checkout samples include empty pg and bankcode; omitting them can break checkout. */
+function payuHostedCheckoutExtras() {
+    return { pg: '', bankcode: '' };
+}
+
+/** Pipe breaks SHA512 hash segments; PayU hashes productinfo as a single field. */
+function sanitizePayuProductInfo(s) {
+    const t = String(s || '')
+        .replace(/\|/g, ' ')
+        .replace(/\r?\n/g, ' ')
+        .trim();
+    return (t || 'Service').slice(0, 100);
+}
+
 function generatePayuHash(params, salt) {
     const udf1 = params.udf1 || '';
     const udf2 = params.udf2 || '';
@@ -20,13 +34,14 @@ function generatePayuHash(params, salt) {
     const udf4 = params.udf4 || '';
     const udf5 = params.udf5 || '';
     const hashString = `${params.key}|${params.txnid}|${params.amount}|${params.productinfo}|${params.firstname}|${params.email}|${udf1}|${udf2}|${udf3}|${udf4}|${udf5}||||||${salt}`;
-    return crypto.createHash('sha512').update(hashString).digest('hex');
+    return crypto.createHash('sha512').update(hashString).digest('hex').toLowerCase();
 }
 
 function verifyPayuResponseHash(body, salt) {
     const hashString = `${salt}|${body.status}||||||${body.udf5 || ''}|${body.udf4 || ''}|${body.udf3 || ''}|${body.udf2 || ''}|${body.udf1 || ''}|${body.email}|${body.firstname}|${body.productinfo}|${body.amount}|${body.txnid}|${body.key}`;
-    const expectedHash = crypto.createHash('sha512').update(hashString).digest('hex');
-    return expectedHash === (body.hash || body.hashes?.sha512 || '');
+    const expectedHash = crypto.createHash('sha512').update(hashString).digest('hex').toLowerCase();
+    const got = String(body.hash || body.hashes?.sha512 || '').toLowerCase();
+    return expectedHash === got;
 }
 
 function payuAutoPostHtml({ payuUrl, fields, title }) {
@@ -94,9 +109,8 @@ router.post('/init', async (req, res) => {
         const txnid = `TXN${bookingId.toString().slice(-8)}${Date.now().toString(36).toUpperCase()}`;
 
         const firstname = (booking.name || '').replace(/[^a-zA-Z\s]/g, '').trim().split(/\s+/)[0] || 'Customer';
-        const productinfo = `Property Measurement - ${booking.serviceType}`;
+        const productinfo = sanitizePayuProductInfo(`Property Measurement - ${booking.serviceType}`);
 
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
         const apiBase = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5555}`;
         const surl = `${apiBase}/api/payment/success`;
         const furl = `${apiBase}/api/payment/failure`;
@@ -112,10 +126,10 @@ router.post('/init', async (req, res) => {
             surl,
             furl,
             udf1: bookingId.toString(),
+            ...payuHostedCheckoutExtras(),
         };
 
         params.hash = generatePayuHash(params, salt);
-        params.service_provider = 'payu_paisa';
         params.payuUrl = getPayuUrl();
 
         res.json({ success: true, data: params });
@@ -151,7 +165,7 @@ router.get('/remaining/pay', async (req, res) => {
         const amountStr = Number(booking.remainingAmount || 0).toFixed(2);
         const txnid = `RMN${bookingId.toString().slice(-8)}${Date.now().toString(36).toUpperCase()}`;
         const firstname = (booking.name || '').replace(/[^a-zA-Z\s]/g, '').trim().split(/\s+/)[0] || 'Customer';
-        const productinfo = `Remaining Payment - ${booking.serviceType}`;
+        const productinfo = sanitizePayuProductInfo(`Remaining Payment - ${booking.serviceType}`);
 
         const apiBase = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5555}`;
         const surl = `${apiBase}/api/payment/remaining/success`;
@@ -168,9 +182,9 @@ router.get('/remaining/pay', async (req, res) => {
             surl,
             furl,
             udf1: bookingId.toString(),
+            ...payuHostedCheckoutExtras(),
         };
         params.hash = generatePayuHash(params, salt);
-        params.service_provider = 'payu_paisa';
 
         const html = payuAutoPostHtml({
             payuUrl: getPayuUrl(),
