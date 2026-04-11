@@ -13,6 +13,20 @@ function getPayuUrl() {
     return mode === 'production' || mode === 'live' ? PAYU_PROD_URL : PAYU_TEST_URL;
 }
 
+/** Stops CDNs/browsers from caching PayU bridge HTML (replays = duplicate txn / PayU 429). */
+function setPayuBridgeHeaders(res) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+}
+
+function escapeHtmlAttr(s) {
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;');
+}
+
 function generatePayuHash(params, salt) {
     const udf1 = params.udf1 || '';
     const udf2 = params.udf2 || '';
@@ -49,15 +63,19 @@ function pickPayuPostBodyFields(obj) {
 function payuAutoPostHtml({ payuUrl, fields, title }) {
     const safe = pickPayuPostBodyFields(fields);
     const inputs = Object.entries(safe)
-        .map(([k, v]) => `<input type="hidden" name="${k}" value="${String(v).replace(/"/g, '&quot;')}" />`)
+        .map(([k, v]) => `<input type="hidden" name="${escapeHtmlAttr(k)}" value="${escapeHtmlAttr(v)}" />`)
         .join('\n');
+    const actionUrl = escapeHtmlAttr(payuUrl);
+    const safeTitle = escapeHtmlAttr(title || 'Redirecting to PayU...');
 
     return `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>${title || 'Redirecting to PayU...'}</title>
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate"/>
+    <meta http-equiv="Pragma" content="no-cache"/>
+    <title>${safeTitle}</title>
     <style>
       body { font-family: Arial, sans-serif; padding: 24px; color: #0f172a; }
       .box { max-width: 520px; margin: 50px auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; }
@@ -68,11 +86,13 @@ function payuAutoPostHtml({ payuUrl, fields, title }) {
     <div class="box">
       <h2 style="margin:0 0 8px;">Redirecting to PayU</h2>
       <p class="muted" style="margin:0;">Please wait…</p>
-      <form id="payuForm" method="POST" action="${payuUrl}">
+      <form id="payuForm" method="POST" action="${actionUrl}">
         ${inputs}
       </form>
+      <p class="muted" style="margin:12px 0 0;">If you are not redirected automatically, tap the button below (only once).</p>
+      <button type="button" onclick="payuSubmitOnce()" style="margin-top:10px;padding:10px 16px;font-size:14px;cursor:pointer;border:1px solid #cbd5e1;border-radius:8px;background:#f8fafc;">Continue to PayU</button>
     </div>
-    <script>(function(){var f=document.getElementById("payuForm");if(!f||f.getAttribute("data-once")==="1")return;f.setAttribute("data-once","1");f.submit();})();</script>
+    <script>(function(){var done=false;window.payuSubmitOnce=function(){if(done)return;done=true;var f=document.getElementById("payuForm");if(f)try{f.submit();}catch(e){}};setTimeout(payuSubmitOnce,250);})();</script>
   </body>
 </html>`;
 }
@@ -111,7 +131,7 @@ async function buildAdvancePayuCheckout(bookingId) {
             return Math.round((advanceAmount + advanceGstAmount) * 100) / 100;
         })();
     const amountStr = Number(amountToCharge).toFixed(2);
-    const txnid = `TXN${bookingId.toString().slice(-8)}${Date.now().toString(36).toUpperCase()}`;
+    const txnid = `TXN${bookingId.toString().slice(-8)}${Date.now().toString(36).toUpperCase()}${crypto.randomBytes(4).toString('hex')}`;
 
     const firstname = (booking.name || '').replace(/[^a-zA-Z\s]/g, '').trim().split(/\s+/)[0] || 'Customer';
     const productinfo = `Property Measurement - ${booking.serviceType}`;
@@ -156,23 +176,33 @@ router.post('/init', async (req, res) => {
 });
 
 /**
- * GET /api/payment/advance/pay?bookingId=XXX
- * Full-page HTML that auto-POSTs to PayU once. Prefer this over POST /init + client form.submit()
- * to avoid duplicate submissions and PayU "Too many Requests" rate limits.
+ * GET/POST /api/payment/advance/pay — bookingId in query (GET) or body (POST x-www-form-urlencoded).
+ * POST from the website avoids CDN/browser caching and speculative prefetch of GET URLs (PayU 429).
+ * Returns HTML that POSTs to PayU exactly once (auto + optional manual button).
  */
-router.get('/advance/pay', async (req, res) => {
-    try {
-        const bookingId = (req.query.bookingId || '').toString().trim();
-        const key = process.env.PAYU_MERCHANT_KEY;
-        const salt = process.env.PAYU_SALT;
+async function handleAdvancePay(req, res) {
+    const rawId = req.method === 'POST' ? req.body?.bookingId : req.query?.bookingId;
+    const bookingId = (rawId != null ? String(rawId) : '').trim();
 
+    const key = process.env.PAYU_MERCHANT_KEY;
+    const salt = process.env.PAYU_SALT;
+
+    const sendHtml = (status, body) => {
+        setPayuBridgeHeaders(res);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.status(status).send(body);
+    };
+
+    try {
         if (!key || !salt) {
-            return res.status(500).setHeader('Content-Type', 'text/html; charset=utf-8').send(
+            return sendHtml(
+                500,
                 '<!doctype html><html><body style="font-family:Arial;padding:24px;"><h2>Configuration error</h2><p>Payment is not configured. Please contact support.</p></body></html>'
             );
         }
         if (!bookingId) {
-            return res.status(400).setHeader('Content-Type', 'text/html; charset=utf-8').send(
+            return sendHtml(
+                400,
                 '<!doctype html><html><body style="font-family:Arial;padding:24px;"><h2>Missing booking</h2><p>Please go back and try again.</p></body></html>'
             );
         }
@@ -183,16 +213,30 @@ router.get('/advance/pay', async (req, res) => {
             title: 'Redirecting to PayU',
             fields: postFields,
         });
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.status(200).send(html);
+        sendHtml(200, html);
     } catch (err) {
         console.error('Advance pay page error:', err);
         const code = err.statusCode || 500;
         const msg = (err.message || 'Something went wrong.').replace(/</g, '&lt;');
-        res.status(code).setHeader('Content-Type', 'text/html; charset=utf-8').send(
+        sendHtml(
+            code,
             `<!doctype html><html><body style="font-family:Arial;padding:24px;"><h2>Payment could not start</h2><p>${msg}</p><p><a href="javascript:history.back()">Go back</a></p></body></html>`
         );
     }
+}
+
+router.get('/advance/pay', (req, res) => {
+    handleAdvancePay(req, res).catch((e) => {
+        console.error('Advance pay async error:', e);
+        if (!res.headersSent) res.status(500).send('Error');
+    });
+});
+
+router.post('/advance/pay', (req, res) => {
+    handleAdvancePay(req, res).catch((e) => {
+        console.error('Advance pay async error:', e);
+        if (!res.headersSent) res.status(500).send('Error');
+    });
 });
 
 // GET /api/payment/remaining/pay?bookingId=XXX — engineer collects remaining payment (incl GST)
@@ -219,7 +263,7 @@ router.get('/remaining/pay', async (req, res) => {
         }
 
         const amountStr = Number(booking.remainingAmount || 0).toFixed(2);
-        const txnid = `RMN${bookingId.toString().slice(-8)}${Date.now().toString(36).toUpperCase()}`;
+        const txnid = `RMN${bookingId.toString().slice(-8)}${Date.now().toString(36).toUpperCase()}${crypto.randomBytes(4).toString('hex')}`;
         const firstname = (booking.name || '').replace(/[^a-zA-Z\s]/g, '').trim().split(/\s+/)[0] || 'Customer';
         const productinfo = `Remaining Payment - ${booking.serviceType}`;
 
@@ -247,6 +291,7 @@ router.get('/remaining/pay', async (req, res) => {
             title: 'Pay Remaining Amount',
             fields: params,
         });
+        setPayuBridgeHeaders(res);
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.status(200).send(html);
     } catch (err) {
