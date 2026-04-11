@@ -155,6 +155,46 @@ router.post('/init', async (req, res) => {
     }
 });
 
+/**
+ * GET /api/payment/advance/pay?bookingId=XXX
+ * Full-page HTML that auto-POSTs to PayU once. Prefer this over POST /init + client form.submit()
+ * to avoid duplicate submissions and PayU "Too many Requests" rate limits.
+ */
+router.get('/advance/pay', async (req, res) => {
+    try {
+        const bookingId = (req.query.bookingId || '').toString().trim();
+        const key = process.env.PAYU_MERCHANT_KEY;
+        const salt = process.env.PAYU_SALT;
+
+        if (!key || !salt) {
+            return res.status(500).setHeader('Content-Type', 'text/html; charset=utf-8').send(
+                '<!doctype html><html><body style="font-family:Arial;padding:24px;"><h2>Configuration error</h2><p>Payment is not configured. Please contact support.</p></body></html>'
+            );
+        }
+        if (!bookingId) {
+            return res.status(400).setHeader('Content-Type', 'text/html; charset=utf-8').send(
+                '<!doctype html><html><body style="font-family:Arial;padding:24px;"><h2>Missing booking</h2><p>Please go back and try again.</p></body></html>'
+            );
+        }
+
+        const { postFields, payuUrl } = await buildAdvancePayuCheckout(bookingId);
+        const html = payuAutoPostHtml({
+            payuUrl,
+            title: 'Redirecting to PayU',
+            fields: postFields,
+        });
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.status(200).send(html);
+    } catch (err) {
+        console.error('Advance pay page error:', err);
+        const code = err.statusCode || 500;
+        const msg = (err.message || 'Something went wrong.').replace(/</g, '&lt;');
+        res.status(code).setHeader('Content-Type', 'text/html; charset=utf-8').send(
+            `<!doctype html><html><body style="font-family:Arial;padding:24px;"><h2>Payment could not start</h2><p>${msg}</p><p><a href="javascript:history.back()">Go back</a></p></body></html>`
+        );
+    }
+});
+
 // GET /api/payment/remaining/pay?bookingId=XXX — engineer collects remaining payment (incl GST)
 router.get('/remaining/pay', async (req, res) => {
     try {
