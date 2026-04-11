@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const Booking = require('../models/Booking');
 const { buildBookingConfirmationHtml } = require('../utils/booking_confirmation_pdf');
 const { renderPdfBufferFromHtml } = require('../utils/render_pdf');
+const { sendBookingConfirmationEmail } = require('../utils/send_booking_confirmation');
 
 // POST /api/bookings — create a new booking
 router.post('/', async (req, res) => {
@@ -140,6 +141,62 @@ router.get('/:id/confirmation-pdf', async (req, res) => {
         res.status(200).send(pdfBuffer);
     } catch (err) {
         console.error('confirmation-pdf error:', err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// PATCH /api/bookings/:id/mark-paid-manual — admin/offline: advance collected; enables QR flow & engineer paid filter
+router.patch('/:id/mark-paid-manual', async (req, res) => {
+    try {
+        const booking = await Booking.findById(req.params.id);
+        if (!booking) {
+            return res.status(404).json({ success: false, message: 'Booking not found.' });
+        }
+        if (booking.paymentStatus === 'Paid') {
+            return res.json({
+                success: true,
+                message: 'Booking is already marked as paid.',
+                data: booking,
+            });
+        }
+        if (booking.status === 'Cancelled') {
+            return res.status(400).json({ success: false, message: 'Cannot mark a cancelled booking as paid.' });
+        }
+        if (booking.status === 'Completed') {
+            return res.status(400).json({ success: false, message: 'This booking is already completed.' });
+        }
+
+        const isAssigned =
+            booking.assignedEngineerId != null ||
+            booking.status === 'Assigned' ||
+            booking.engineerStatus === 'Assigned';
+
+        const payuTxnId = booking.payuTxnId && String(booking.payuTxnId).trim()
+            ? booking.payuTxnId
+            : `ADMIN_${Date.now()}`;
+
+        const updates = {
+            paymentStatus: 'Paid',
+            payuTxnId,
+        };
+
+        if (!isAssigned) {
+            updates.status = 'Confirmed';
+        }
+
+        const updated = await Booking.findByIdAndUpdate(req.params.id, updates, { new: true });
+
+        sendBookingConfirmationEmail({ booking: updated }).catch((err) => {
+            console.error('Manual mark-paid: confirmation email failed:', err?.message || err);
+        });
+
+        res.json({
+            success: true,
+            message: 'Booking marked as paid. Customer confirmation email is being sent when SMTP is configured.',
+            data: updated,
+        });
+    } catch (err) {
+        console.error('mark-paid-manual error:', err);
         res.status(500).json({ success: false, message: err.message });
     }
 });
