@@ -109,7 +109,12 @@ const getPaymentFormHtml = (params) => {
 <form id="payuForm" method="post" action="${PAYU_ENDPOINT}">
 ${fields}
 </form>
-<script>document.getElementById('payuForm').submit();</script>
+<script>
+    if (!window.payuSubmitted) {
+        window.payuSubmitted = true;
+        document.getElementById('payuForm').submit();
+    }
+</script>
 </body>
 </html>`;
 };

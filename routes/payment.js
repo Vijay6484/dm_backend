@@ -56,9 +56,12 @@ async function buildAdvancePaymentParams(bookingId) {
             return Math.round((advanceAmount + advanceGstAmount) * 100) / 100;
         })();
 
-    const txnId = `TXN${bookingId.toString().slice(-8)}${Date.now().toString(36).toUpperCase()}${crypto.randomBytes(4).toString('hex')}`;
+    // PayU txnid maximum length is 25 chars.
+    // 'TXN' (3) + slice(-8) (8) + random (8) = 19 chars
+    const randomHex = crypto.randomBytes(4).toString('hex').toUpperCase();
+    const txnId = `TXN${bookingId.toString().slice(-8)}${randomHex}`;
     const firstName = (booking.name || '').replace(/[^a-zA-Z\s]/g, '').trim().split(/\s+/)[0] || 'Customer';
-    const productInfo = `Property Measurement - ${booking.serviceType}`;
+    const productInfo = `Property Measurement - ${booking.serviceType.substring(0, 50)} (${Date.now().toString().slice(-4)})`;
 
     const params = createPaymentParams({
         txnId,
@@ -191,9 +194,11 @@ router.get('/remaining/pay', async (req, res) => {
             return res.status(200).send('<html><body><h3>Remaining payment already completed.</h3></body></html>');
         }
 
-        const txnId = `RMN${bookingId.toString().slice(-8)}${Date.now().toString(36).toUpperCase()}${crypto.randomBytes(4).toString('hex')}`;
+        // 'RMN' (3) + slice(-8) (8) + random (8) = 19 chars
+        const randomHex = crypto.randomBytes(4).toString('hex').toUpperCase();
+        const txnId = `RMN${bookingId.toString().slice(-8)}${randomHex}`;
         const firstName = (booking.name || '').replace(/[^a-zA-Z\s]/g, '').trim().split(/\s+/)[0] || 'Customer';
-        const productInfo = `Remaining Payment - ${booking.serviceType}`;
+        const productInfo = `Remaining Payment - ${booking.serviceType.substring(0, 50)} (${Date.now().toString().slice(-4)})`;
 
         const params = createPaymentParams({
             txnId,
